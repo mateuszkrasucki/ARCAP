@@ -1,9 +1,43 @@
-// ObjectTracking.cpp : Define the entry point for console app.  
-#include <opencv\cv.h>
-#include <opencv\highgui.h>
-#include "BlobResult.h"  
-#define CNT_LENGTH 12
-#define CNT_RESET 6
+/* Program umo¿liwiaj¹cy robienie zdjêæ za pomoc¹ kamery umieszczonej na g³owie i ramki s³u¿¹cej do wskazywania interesuj¹cego obszaru. */
+#include "arcap.h"
+
+
+CvPoint pt1_calibrate, pt2_calibrate, pt3_calibrate, pt4_calibrate;
+int drag = 0;
+CvCapture *capture = 0;
+int key = 0;
+CvRect rect_calibrate;
+IplImage* frame, * img1;
+
+/* Metoda s³u¿¹ca do obs³ugi zaznaczania obszaru, który widoczny jest w ramce w trakcie kalibracji.  */
+void areaSelector(int event, int x, int y, int flags, void* param)
+{
+    /* wciœniêcie lewego przycisku myszki  */
+    if (event == CV_EVENT_LBUTTONDOWN && !drag)
+    {
+        pt1_calibrate = cvPoint(x, y);
+        drag = 1;
+    }
+    /* user drag the mouse */
+    if (event == CV_EVENT_MOUSEMOVE && drag)
+    {
+        img1 = cvCloneImage(frame);
+        cvRectangle(img1,pt1_calibrate,cvPoint(x, y),CV_RGB(255, 0, 0),1,8,0);
+        cvShowImage("video", img1);
+    }
+    /* user release left button */
+    if (event == CV_EVENT_LBUTTONUP && drag)
+    {
+		pt2_calibrate = cvPoint(x,y);
+        drag = 0;
+    }
+
+    /* user click right button: reset all */
+    if (event == CV_EVENT_RBUTTONUP)
+    {
+        drag = 0;
+    }
+}
 
 // Get thresholded image in HSV format  
 IplImage* GetThresholdedImageHSV_Green( IplImage* img )  
@@ -85,6 +119,10 @@ IplImage* GetThresholdedImageHSV_Red( IplImage* img )
 
 int main()  
 { 
+	cvNamedWindow( "video" );  
+	cvNamedWindow( "thresh" );        
+	cvNamedWindow( "thresh_red" );  
+	
 	int width [CNT_LENGTH];
 	int height [CNT_LENGTH];
 	int x[CNT_LENGTH];
@@ -107,13 +145,9 @@ int main()
     CBlob *currentBlob_red;  
 
     CvPoint pt1, pt2;  
-    CvRect cvRect;  
-
-	CvPoint pt1_red, pt2_red, pt3_red, pt4_red;  
-    CvRect cvRect_red;  
+    CvRect rect;  
 
     int key = 0;  
-    IplImage* frame = 0;
 
 	IplImage* imgThresh0 = 0;
 	IplImage* imgThresh1 = 0;
@@ -126,7 +160,7 @@ int main()
 	IplConvKernel *element = cvCreateStructuringElementEx(2,2,1,1,CV_SHAPE_RECT);
   
 
-	frame = cvLoadImage("calibr.png", 1 );
+	frame = cvLoadImage("calibr1.png", 1 );
 	cvSmooth(frame, frame, CV_GAUSSIAN,3,3); 
 
 	imgThresh1 = GetThresholdedImageHSV_Green( frame );   
@@ -161,11 +195,11 @@ int main()
   
         if(num_blobs > 0)         {
 				currentBlob = blobs.GetBlob( 0 );              
-                cvRect = currentBlob->GetBoundingBox(); 
-				pt1.x = cvRect.x + 0.1*cvRect.width;  
-				pt1.y = cvRect.y + 0.05*cvRect.height; 
-				pt2.x =  pt1.x + 0.8*cvRect.width;  
-				pt2.y= pt1.y + 0.85*cvRect.height;  
+                rect = currentBlob->GetBoundingBox(); 
+				pt1.x = rect.x + 0.1*rect.width;  
+				pt1.y = rect.y + 0.05*rect.height; 
+				pt2.x =  pt1.x + 0.8*rect.width;  
+				pt2.y= pt1.y + 0.85*rect.height;  
             // Attach bounding rect to blob in orginal video input  
            /* cvRectangle( frame,  
                          pt1,   
@@ -180,37 +214,46 @@ int main()
   
         if(num_blobs_red > 1)         {
 			    currentBlob_red = blobs_red.GetBlob( 0 );              
-                cvRect_red = currentBlob_red->GetBoundingBox(); 
-				pt1_red.x = cvRect_red.x;  
-				pt1_red.y = cvRect_red.y;  
-				pt2_red.x = cvRect_red.x + cvRect_red.width;  
-				pt2_red.y = cvRect_red.y + cvRect_red.height;  
+                rect_calibrate = currentBlob_red->GetBoundingBox(); 
+				pt1_calibrate.x = rect_calibrate.x;  
+				pt1_calibrate.y = rect_calibrate.y;  
+				pt2_calibrate.x = rect_calibrate.x + rect_calibrate.width;  
+				pt2_calibrate.y = rect_calibrate.y + rect_calibrate.height;  
 
 			    currentBlob_red = blobs_red.GetBlob( 1 );              
-                cvRect_red = currentBlob_red->GetBoundingBox(); 
-				pt3_red.x = cvRect_red.x;
-				pt3_red.y = cvRect_red.y; 
-				pt4_red.x = cvRect_red.x + cvRect_red.width;  
-				pt4_red.y = cvRect_red.y + cvRect_red.height;  
+                rect_calibrate = currentBlob_red->GetBoundingBox(); 
+				pt3_calibrate.x = rect_calibrate.x;
+				pt3_calibrate.y = rect_calibrate.y; 
+				pt4_calibrate.x = rect_calibrate.x + rect_calibrate.width;  
+				pt4_calibrate.y = rect_calibrate.y + rect_calibrate.height;  
 
 				printf("pt1.x %d  pt1.y %d\n", pt1.x, pt1.y);
 				printf("pt2.x %d  pt2.y %d\n\n", pt2.x, pt2.y);
-				printf("RED pt1.x %d  pt1.y %d\n", pt1_red.x, pt1_red.y);
-				printf("RED pt2.x %d  pt2.y %d\n", pt2_red.x, pt2_red.y);
-				printf("RED pt3.x %d  pt3.y %d\n", pt3_red.x, pt3_red.y);
-				printf("RED pt4.x %d  pt4.y %d\n", pt4_red.x, pt4_red.y);
+				printf("CALIBRATE pt1.x %d  pt1.y %d\n", pt1_calibrate.x, pt1_calibrate.y);
+				printf("CALIBRATE pt2.x %d  pt2.y %d\n", pt2_calibrate.x, pt2_calibrate.y);
+				printf("CALIBRATE pt3.x %d  pt3.y %d\n", pt3_calibrate.x, pt3_calibrate.y);
+				printf("CALIBRATE pt4.x %d  pt4.y %d\n", pt4_calibrate.x, pt4_calibrate.y);
             // Attach bounding rect to blob in orginal video input  
         }  
 
-		double pt1xB = double(pt1_red.x - cvRect.x)/double(cvRect.width*cvRect.height);
-		double pt1yB = double(pt1_red.y - cvRect.y)/double(cvRect.width*cvRect.height);
+		double pt1xB = double(pt1_calibrate.x - rect.x)/sqrt(double(rect.width*rect.height));
+		double pt1yB = double(pt1_calibrate.y - rect.y)/sqrt(double(rect.width*rect.height));
 
-		double widthA = double((pt4_red.x-pt1_red.x))/double(cvRect.width);
-		double heightA = double((pt4_red.y-pt1_red.y))/double(cvRect.height);
-				pt1.x = cvRect.x + int(pt1xB*cvRect.width*cvRect.height); 
-				pt1.y = cvRect.y + int(pt1yB*cvRect.width*cvRect.height); 
-				pt2.x =  pt1.x + int(widthA*cvRect.width);  
-				pt2.y= pt1.y + int(heightA*cvRect.height);  
+		/*int pt1xB = pt1_red.x - cvRect.x;
+		int pt1yB = pt1_red.y - cvRect.y;*/
+
+		double widthA = double((pt4_calibrate.x-pt1_calibrate.x))/double(rect.width);
+		//double heightA = double((pt4_red.y-pt1_red.y))/double(cvRect.height);
+		double heightA = widthA; 
+				
+				printf("pt1xB %f  pt1yB %f\n", pt1xB, pt1yB);
+				printf("widthA %f  heightA %f\n\n", widthA, heightA);
+
+				pt1_calibrate.x = rect.x + int(pt1xB * sqrt(double(rect.width*rect.height))-3.2); 
+				pt1_calibrate.y = rect.y + int(pt1yB * sqrt(double(rect.width*rect.height))-2.4); 
+
+				pt2_calibrate.x =  pt1_calibrate.x + int(widthA*rect.width+6.4);  
+				pt2_calibrate.y= pt1_calibrate.y + int(heightA*rect.height+4.8);  
 				
 				cvRectangle( frame,  
                          pt1,   
@@ -220,17 +263,49 @@ int main()
                          8,  
                          0 );  
 
+				cvRectangle( frame,  
+                         pt1_calibrate,   
+                         pt2_calibrate,  
+                         cvScalar(170, 170, 170, 0),  
+                         1,  
+                         8,  
+                         0 );
 
-        // Add the black and white and original images  
-		cvNamedWindow( "video" );  
-		cvNamedWindow( "thresh" );        
-		cvNamedWindow( "thresh_red" );   
 
+        // Add the black and white and original images   
         cvShowImage( "thresh", imgThresh1 );  
-        cvShowImage( "video", frame );  
 		cvShowImage( "thresh_red", imgThresh_Red );  
+
+		while( key != 'c' )
+		{
+			cvShowImage("video", frame);
+			key = cvWaitKey(10);
+		}
+
+		while( key != 'q' )
+		{
+			//frame = cvQueryFrame( capture );
+			//if (rect.width>0)
+			//	cvSetImageROI(frame,rect);
+			cvSetMouseCallback("video", mouseHandler, NULL);
+			key = cvWaitKey(10);
+			//if( (char) key== 'r' ){ rect = cvRect(0,0,0,0); cvResetImageROI(frame);}
+			//cvShowImage("video", frame);
+		}
+		pt1xB = double(pt1_calibrate.x - rect.x)/sqrt(double(rect.width*rect.height));
+		pt1yB = double(pt1_calibrate.y - rect.y)/sqrt(double(rect.width*rect.height));
+
+		/*int pt1xB = pt1_red.x - cvRect.x;
+		int pt1yB = pt1_red.y - cvRect.y;*/
+
+		widthA = double((pt4_calibrate.x-pt1_calibrate.x))/double(rect.width);
+		//double heightA = double((pt4_red.y-pt1_red.y))/double(cvRect.height);
+		heightA = widthA; 
+				
+				printf("pt1xB %f  pt1yB %f\n", pt1xB, pt1yB);
+				printf("widthA %f  heightA %f\n\n", widthA, heightA);
 		 
-		key = cvWaitKey( 2000 ); 
+		key = cvWaitKey( 10000 ); 
 
 
     // Initialize capturing live feed from video file or camera  
@@ -299,13 +374,13 @@ int main()
         if(num_blobs > 0)         {
 			cnt2 = 0;
 			currentBlob = blobs.GetBlob( 0 );              
-            cvRect = currentBlob->GetBoundingBox(); 
+            rect = currentBlob->GetBoundingBox(); 
 			
 			if(cnt<=CNT_LENGTH-1)	{
-				x[cnt] = cvRect.x;  
-				y[cnt] = cvRect.y;  
-				width[cnt] =  cvRect.width;  
-				height[cnt]= cvRect.height;  
+				x[cnt] = rect.x;  
+				y[cnt] = rect.y;  
+				width[cnt] =  rect.width;  
+				height[cnt]= rect.height;  
 				cnt++;
 			}
 			else if(cnt==CNT_LENGTH)	{
@@ -315,10 +390,10 @@ int main()
 					width[i] =  width[i+1];
 					height[i] = height[i+1];
 				}
-				x[cnt-1] = cvRect.x;  
-				y[cnt-1] = cvRect.y;  
-				width[cnt-1] =  cvRect.width;  
-				height[cnt-1]= cvRect.height;  
+				x[cnt-1] = rect.x;  
+				y[cnt-1] = rect.y;  
+				width[cnt-1] =  rect.width;  
+				height[cnt-1]= rect.height;  
 			}
 
 			int xAvg = 0;
@@ -343,10 +418,12 @@ int main()
             pt2.y = pt1.y + heightAvg;
   
 
-				pt1_red.x = xAvg + int(pt1xB*cvRect.width*cvRect.height); 
-				pt1_red.y = yAvg + 2 * int(pt1yB*cvRect.width*cvRect.height); 
-				pt2_red.x =  pt1_red.x + int(widthA*widthAvg);  
-				pt2_red.y= pt1_red.y + int(heightA*heightAvg);  
+				pt1_calibrate.x = xAvg + int(pt1xB * sqrt(double(rect.width*rect.height))-3.2); 
+				pt1_calibrate.y = yAvg + int(pt1yB * sqrt(double(rect.width*rect.height))-2.4); 
+				/*pt1_calibrate.x = xAvg + pt1xB;
+				pt1_calibrate.y = yAvg +  pt1yB;*/
+				pt2_calibrate.x =  pt1_calibrate.x + int(widthA*widthAvg+6.4);  
+				pt2_calibrate.y= pt1_calibrate.y + int(heightA*heightAvg+4.8);  
   
             // Attach bounding rect to blob in orginal video input  
             cvRectangle( frame,  
@@ -357,8 +434,8 @@ int main()
                          8,  
                          0 );  
             cvRectangle( frame,  
-                         pt1_red,   
-                         pt2_red,  
+                         pt1_calibrate,   
+                         pt2_calibrate,  
                          cvScalar(170, 170, 170, 170),  
                          1,  
                          8,  
